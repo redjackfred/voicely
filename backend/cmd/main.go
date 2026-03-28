@@ -10,6 +10,7 @@ import (
 	"github.com/redjackfred/voicely/backend/internal/database"
 	"github.com/redjackfred/voicely/backend/internal/models"
 	"github.com/redjackfred/voicely/backend/internal/places"
+	"github.com/redjackfred/voicely/backend/internal/voiceai"
 )
 
 type CallRequest struct {
@@ -97,7 +98,42 @@ func handleCallRequest(c *gin.Context) {
 	// ==========================================
 	// Here, you would typically assemble the prompt for the LLM by combining the user preferences and store knowledge base,
 	// and then send it to your chosen AI agent (e.g., Vapi.ai or Bland AI) to generate the phone call script and execute the call.
+	vapiAPIKey := os.Getenv("VAPI_API_KEY")
+	if vapiAPIKey == "" {
+		log.Println("VAPI_API_KEY environment variable is not set")
+	}
 
+	myTestPhoneNumber := "+12532008592"
+	log.Printf("Testing call initiation to %s for store: %s at phone number: %s", req.Item, store.Name, myTestPhoneNumber)
+
+	// 呼叫我們剛剛建立的 voiceai package 發起通話
+	// 將 JSONB 型態的 Preferences 與 KnowledgeBase 轉為字串注入 Prompt
+	callID, err := voiceai.InitiateCall(
+		myTestPhoneNumber,
+		store.Name,
+		req.Item,
+		string(user.Preferences),
+		string(store.KnowledgeBase),
+		vapiAPIKey,
+	)
+	if err != nil {
+		log.Printf("Failed to initiate the call: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Cannot initiate the call, please try again later"})
+		return
+	}
+
+	// ==========================================
+	// 階段四：建立通話紀錄 (Database Logging)
+	// ==========================================
+	// 根據專案規格，將本次任務寫入 Calls Table [3]
+	newCall := models.Call{
+		UserID:  user.ID,
+		StoreID: store.ID,
+		Status:  "calling", // 稍後 Webhook 會更新為 success/failed/retrying
+	}
+	database.DB.Create(&newCall)
+
+	// 回傳最終成功訊息給前端
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
 		"message": "AI agent has received the request, and it's calling: " + store.Name + " at " + store.PhoneNumber,
@@ -107,6 +143,8 @@ func handleCallRequest(c *gin.Context) {
 			"item":        req.Item,
 			"user_name":   user.Name,
 			"preferences": user.Preferences,
+			"call_id":     newCall.ID,
+			"vapi_id":     callID,
 		},
 	})
 }
