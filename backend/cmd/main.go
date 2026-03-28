@@ -102,8 +102,12 @@ func handleCallRequest(c *gin.Context) {
 	if vapiAPIKey == "" {
 		log.Println("VAPI_API_KEY environment variable is not set")
 	}
+	vapiPhoneID := os.Getenv("VAPI_PHONE_NUMBER_ID")
+	if vapiPhoneID == "" {
+		log.Println("VAPI_PHONE_NUMBER_ID environment variable is not set")
+	}
 
-	myTestPhoneNumber := "+12532008592"
+	myTestPhoneNumber := os.Getenv("MY_TEST_PHONE_NUMBER")
 	log.Printf("Testing call initiation to %s for store: %s at phone number: %s", req.Item, store.Name, myTestPhoneNumber)
 
 	// 呼叫我們剛剛建立的 voiceai package 發起通話
@@ -115,6 +119,7 @@ func handleCallRequest(c *gin.Context) {
 		string(user.Preferences),
 		string(store.KnowledgeBase),
 		vapiAPIKey,
+		vapiPhoneID,
 	)
 	if err != nil {
 		log.Printf("Failed to initiate the call: %v", err)
